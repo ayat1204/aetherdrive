@@ -8,12 +8,15 @@
 </head>
 <body>
   <header>
-    <h1>AetherDrive — быстрый прототип</h1>
-    <p>Простой веб-интерфейс для загрузки, просмотра и скачивания файлов (локально в браузере).</p>
+    <h1>AetherDrive — общий прототип (тёмная тема)</h1>
+    <p>Файлы теперь хранятся на сервере — если один пользователь загрузил файл, скачать его могут все. Если сервера нет, сайт использует локальное хранение в браузере.</p>
   </header>
 
   <main>
     <section class="controls">
+      <label for="backendUrl">Backend URL:</label>
+      <input id="backendUrl" placeholder="http://localhost:8000" />
+      <button id="connect">Подключиться</button>
       <input id="fileInput" type="file" multiple />
       <button id="exportAll">Экспортировать все (backup)</button>
       <button id="importBackup">Импортировать backup</button>
@@ -32,7 +35,7 @@
   </main>
 
   <footer>
-    <small>Демо: файлы сохраняются в localStorage браузера. Для общего доступа/сервера нужен бэкенд.</small>
+    <small>Демо: по умолчанию сайт пытается подключиться к указанному backend. Если backend недоступен, используется локальное хранение (localStorage).</small>
   </footer>
 
   <script src="app.js"></script>
