@@ -9,17 +9,19 @@
 <body>
   <header>
     <h1>AetherDrive — общий прототип (тёмная тема)</h1>
-    <p>Файлы теперь хранятся на сервере — если один пользователь загрузил файл, скачать его могут все. Если сервера нет, сайт использует локальное хранение в браузере.</p>
+    <p>Файлы теперь хранятся на сервере (S3). Введите Backend URL и API Key (если требуется), затем подключитесь — все пользователи увидят одни и те же файлы.</p>
   </header>
 
   <main>
     <section class="controls">
       <label for="backendUrl">Backend URL:</label>
-      <input id="backendUrl" placeholder="http://localhost:8000" />
+      <input id="backendUrl" placeholder="https://aetherdrive-backend.example" />
+      <label for="apiKey">API Key:</label>
+      <input id="apiKey" placeholder="API Key (если есть)" />
       <button id="connect">Подключиться</button>
-      <input id="fileInput" type="file" multiple />
-      <button id="exportAll">Экспортировать все (backup)</button>
-      <button id="importBackup">Импортировать backup</button>
+      <input id="fileInput" type="file" multiple disabled />
+      <button id="exportAll" disabled>Экспортировать все (backup)</button>
+      <button id="importBackup" disabled>Импортировать backup</button>
       <input id="search" placeholder="Поиск файла..." />
     </section>
 
@@ -30,12 +32,12 @@
         </thead>
         <tbody></tbody>
       </table>
-      <p id="emptyMsg">Файлов пока нет — загрузите через «Выбрать файлы».</p>
+      <p id="emptyMsg">Подключитесь к backend, чтобы видеть файлы.</p>
     </section>
   </main>
 
   <footer>
-    <small>Демо: по умолчанию сайт пытается подключиться к указанному backend. Если backend недоступен, используется локальное хранение (localStorage).</small>
+    <small>Демо: backend использует S3. Настройте переменные окружения в сервисе (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AETHERDRIVE_S3_BUCKET).</small>
   </footer>
 
   <script src="app.js"></script>
