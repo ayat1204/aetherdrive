@@ -1,37 +1,24 @@
-# AetherDrive backend
+# AetherDrive backend — S3 storage
 
-Простой backend на FastAPI для хранения файлов на диске и их общего доступа.
+Эта версия бекенда сохраняет файлы и метаданные в S3-совместимом хранилище.
 
-Безопасность: поддержка простого API-ключа
-- Если вы хотите ограничить возможность загружать и удалять файлы, задайте переменную окружения AETHERDRIVE_API_KEY перед запуском сервера.
-  Например в Linux/macOS:
+Необходимые переменные окружения
+- AWS_ACCESS_KEY_ID
+- AWS_SECRET_ACCESS_KEY
+- AWS_REGION (опционально, но рекомендуется)
+- AETHERDRIVE_S3_BUCKET — имя bucket'a для хранения файлов и files.json
+- AETHERDRIVE_API_KEY — (опционально) если задан, upload и delete требуют заголовок x-api-key
 
-    export AETHERDRIVE_API_KEY="my-secret-key"
-    uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
+Запуск локально (пример):
 
-- Если AETHERDRIVE_API_KEY не задана, сервер работает в открытом режиме (upload/delete доступны без ключа).
-- Клиент (фронтенд) должен передавать ключ в заголовке 'x-api-key' при запросах POST /upload и DELETE /files/{id}.
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AETHERDRIVE_S3_BUCKET="my-aether-bucket"
+export AETHERDRIVE_API_KEY="my-secret-key"  # опционально
+uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
 
-Запуск локально:
+Деплой (Render / Railway / Cloud Run):
+- Укажите переменные окружения в настройках сервиса как перечислено выше.
+- Примените Dockerfile или используйте pip install -r backend/requirements.txt и запустите uvicorn.
 
-1. Создайте виртуальное окружение и установите зависимости:
-
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install -r backend/requirements.txt
-
-2. Запустите сервер (с ключом или без):
-
-   # с ключом
-   export AETHERDRIVE_API_KEY="your-secret-key"
-   uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
-
-   # без ключа (открытый режим)
-   uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
-
-3. В UI (фронтенд) введите URL backend и API Key (если задан) и нажмите Подключиться.
-
-Замечания по безопасности и production:
-- По умолчанию CORS разрешает все origin — ограничьте это под ваш домен в production.
-- Хранение файлов на диске подходит для простых случаев; для масштабирования используйте S3 или объектное хранилище.
-- Добавьте HTTPS, аутентификацию/разрешения и лимиты на загрузку для production.
+Примечание: при первом запуске, если в бакете отсутствует files.json, он будет создан при первой загрузке файла.
