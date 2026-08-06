@@ -8,20 +8,20 @@
 </head>
 <body>
   <header>
-    <h1>AetherDrive — общий прототип (тёмная тема)</h1>
-    <p>Файлы теперь хранятся на сервере (S3). Введите Backend URL и API Key (если требуется), затем подключитесь — все пользователи увидят одни и те же файлы.</p>
+    <h1>AetherDrive — прототип</h1>
+    <p>Демо: файлы по умолчанию сохраняются в браузере (localStorage). Если хотите общий доступ — подключите backend (введите Backend URL и API Key, если требуется).</p>
   </header>
 
   <main>
     <section class="controls">
       <label for="backendUrl">Backend URL:</label>
-      <input id="backendUrl" placeholder="https://aetherdrive-backend.example" />
+      <input id="backendUrl" placeholder="http://localhost:8000 (опционально)" />
       <label for="apiKey">API Key:</label>
       <input id="apiKey" placeholder="API Key (если есть)" />
       <button id="connect">Подключиться</button>
-      <input id="fileInput" type="file" multiple disabled />
-      <button id="exportAll" disabled>Экспортировать все (backup)</button>
-      <button id="importBackup" disabled>Импортировать backup</button>
+      <input id="fileInput" type="file" multiple />
+      <button id="exportAll">Экспортировать все (backup)</button>
+      <button id="importBackup">Импортировать backup</button>
       <input id="search" placeholder="Поиск файла..." />
     </section>
 
@@ -32,12 +32,12 @@
         </thead>
         <tbody></tbody>
       </table>
-      <p id="emptyMsg">Подключитесь к backend, чтобы видеть файлы.</p>
+      <p id="emptyMsg">Здесь пока нет файлов — загрузите их, они сохранятся в вашем браузере.</p>
     </section>
   </main>
 
   <footer>
-    <small>Демо: backend использует S3. Настройте переменные окружения в сервисе (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AETHERDRIVE_S3_BUCKET).</small>
+    <small>Демо: файлы сохраняются в localStorage браузера. Для общего доступа/сервера нужен бэкенд.</small>
   </footer>
 
   <script src="app.js"></script>

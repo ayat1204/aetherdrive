@@ -1,7 +1,32 @@
-/* Фронтенд: упрощённый режим — требуется backend (S3). Локальный fallback удалён. */
+/* Фронтенд: теперь поддерживает передачу x-api-key при upload/delete.
+   Если API Key введён в UI, он сохраняется в localStorage и добавляется в заголовки.
+   При отсутствии backend используется localStorage как fallback. */
 
-let API_BASE = null; // example: https://your-backend
-let API_KEY = null;
+const STORAGE_KEY = 'aetherdrive_files_v1_local';
+let API_BASE = null; // example: http://localhost:8000
+let API_KEY = null;  // хранится в localStorage key 'aetherdrive_api_key'
+
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
+function loadFilesLocal() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+function saveFilesLocal(files) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(files));
+}
+function saveApiKey(key) {
+  if (key) localStorage.setItem('aetherdrive_api_key', key);
+  else localStorage.removeItem('aetherdrive_api_key');
+  API_KEY = key || null;
+}
+function loadApiKey() {
+  API_KEY = localStorage.getItem('aetherdrive_api_key') || null;
+  if (API_KEY) {
+    const el = document.getElementById('apiKey');
+    if (el) el.value = API_KEY;
+  }
+}
 
 function humanSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
@@ -9,99 +34,170 @@ function humanSize(bytes) {
   return (bytes/(1024*1024)).toFixed(2) + ' MB';
 }
 
-function escapeHtml(s){
-  return (s+'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#039;"})[c]);
-}
-
-function enableControls(enabled){
-  document.getElementById('fileInput').disabled = !enabled;
-  document.getElementById('exportAll').disabled = !enabled;
-  document.getElementById('importBackup').disabled = !enabled;
-}
-
 function renderList(filter=''){
   const tbody = document.querySelector('#filesTable tbody');
   tbody.innerHTML = '';
-  if (!API_BASE) return;
-  fetch(`${API_BASE}/files`)
-    .then(r => r.json())
-    .then(files => {
-      const filtered = files.filter(f => f.name.toLowerCase().includes(filter.toLowerCase()));
-      if (filtered.length === 0) {
-        document.getElementById('emptyMsg').textContent = 'Файлов пока нет.';
-        document.getElementById('emptyMsg').style.display = 'block';
-        document.getElementById('filesTable').style.display = 'none';
-        return;
-      }
-      document.getElementById('emptyMsg').style.display = 'none';
-      document.getElementById('filesTable').style.display = 'table';
-      filtered.forEach(f => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${escapeHtml(f.name)}</td>
-          <td>${humanSize(f.size)}</td>
-          <td>${escapeHtml(f.type || '')}</td>
-          <td>${new Date(f.createdAt).toLocaleString()}</td>
-          <td>
-            <button class="download" data-id="${f.id}">Скачать</button>
-            <button class="delete secondary" data-id="${f.id}">Удалить</button>
-          </td>
-        `;
-        tbody.appendChild(tr);
+  if (API_BASE) {
+    fetch(`${API_BASE}/files`)
+      .then(r => r.json())
+      .then(files => {
+        const filtered = files.filter(f => f.name.toLowerCase().includes(filter.toLowerCase()));
+        renderRows(filtered);
+      })
+      .catch(err => {
+        console.error('Ошибка при получении списка с backend:', err);
+        const local = loadFilesLocal().filter(f => f.name.toLowerCase().includes(filter.toLowerCase()));
+        renderRows(local);
       });
-    })
-    .catch(err => { console.error(err); alert('Не удалось получить список файлов с backend'); });
+  } else {
+    const files = loadFilesLocal();
+    const filtered = files.filter(f => f.name.toLowerCase().includes(filter.toLowerCase()));
+    renderRows(filtered);
+  }
+}
+
+function renderRows(files){
+  const tbody = document.querySelector('#filesTable tbody');
+  if (files.length === 0) {
+    document.getElementById('emptyMsg').style.display = 'block';
+    document.getElementById('filesTable').style.display = 'none';
+    return;
+  }
+  document.getElementById('emptyMsg').style.display = 'none';
+  document.getElementById('filesTable').style.display = 'table';
+  files.forEach(f => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(f.name)}</td>
+      <td>${humanSize(f.size)}</td>
+      <td>${escapeHtml(f.type || '')}</td>
+      <td>${new Date(f.createdAt).toLocaleString()}</td>
+      <td>
+        <button class="download" data-id="${f.id}">Скачать</button>
+        <button class="delete secondary" data-id="${f.id}">Удалить</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function escapeHtml(s){
+  return (s+'').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":"&#039;"}[c]));
 }
 
 async function handleFilesList(filesList){
-  if (!API_BASE) return alert('Сначала подключитесь к backend');
-  const form = new FormData();
-  for (const file of filesList) form.append('files', file);
-  const headers = {};
-  if (API_KEY) headers['x-api-key'] = API_KEY;
-  try {
-    const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: form, headers });
-    if (!res.ok) {
-      const txt = await res.text().catch(()=>null);
-      throw new Error(txt || 'Upload failed');
+  if (API_BASE) {
+    const form = new FormData();
+    for (const file of filesList) form.append('files', file);
+    try {
+      const headers = {};
+      if (API_KEY) headers['x-api-key'] = API_KEY;
+      const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: form, headers });
+      if (!res.ok) {
+        const text = await res.text().catch(()=>null);
+        throw new Error(text || 'Upload failed');
+      }
+      await renderList(document.getElementById('search').value);
+    } catch(e){
+      alert('Ошибка загрузки на сервер: '+e.message);
     }
-    renderList(document.getElementById('search').value);
-  } catch(e){ alert('Ошибка загрузки: '+e.message); }
+    return;
+  }
+
+  // fallback: localStorage as before
+  const files = loadFilesLocal();
+  for (const file of filesList) {
+    const id = uid();
+    const dataURL = await readAsDataURL(file);
+    files.push({ id, name: file.name, size: file.size, type: file.type, createdAt: Date.now(), dataURL });
+    saveFilesLocal(files);
+  }
+  renderList(document.getElementById('search').value);
 }
 
-function downloadFileById(id){
-  if (!API_BASE) return alert('Сначала подключитесь к backend');
-  // Open direct download URL (backend will redirect to presigned S3 URL)
+function readAsDataURL(file){
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+async function downloadFileById(id){
+  if (API_BASE) {
+    try {
+      const res = await fetch(`${API_BASE}/files/${id}/download`);
+      if (!res.ok) return alert('Ошибка скачивания');
+      const blob = await res.blob();
+      const disposition = res.headers.get('content-disposition');
+      let filename = 'file';
+      if (disposition) {
+        const m = disposition.match(/filename=\"?([^\";]+)\"?/);
+        if (m) filename = m[1];
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch(e){ alert('Ошибка: '+e.message); }
+    return;
+  }
+
+  const files = loadFilesLocal();
+  const f = files.find(x => x.id === id);
+  if (!f) return alert('Файл не найден');
   const a = document.createElement('a');
-  a.href = `${API_BASE}/files/${id}/download`;
-  a.target = '_blank';
+  a.href = f.dataURL;
+  a.download = f.name;
   document.body.appendChild(a);
   a.click();
   a.remove();
 }
 
 async function deleteFileById(id){
-  if (!API_BASE) return alert('Сначала подключитесь к backend');
-  const headers = {};
-  if (API_KEY) headers['x-api-key'] = API_KEY;
-  try {
-    const res = await fetch(`${API_BASE}/files/${id}`, { method: 'DELETE', headers });
-    if (!res.ok) {
-      const txt = await res.text().catch(()=>null);
-      throw new Error(txt || 'Delete failed');
-    }
-    renderList(document.getElementById('search').value);
-  } catch(e){ alert('Ошибка удаления: '+e.message); }
+  if (API_BASE) {
+    try {
+      const headers = {};
+      if (API_KEY) headers['x-api-key'] = API_KEY;
+      const res = await fetch(`${API_BASE}/files/${id}`, { method: 'DELETE', headers });
+      if (!res.ok) {
+        const text = await res.text().catch(()=>null);
+        throw new Error(text || 'Delete failed');
+      }
+      renderList(document.getElementById('search').value);
+    } catch(e){ alert('Ошибка удаления: '+e.message); }
+    return;
+  }
+  let files = loadFilesLocal();
+  files = files.filter(x => x.id !== id);
+  saveFilesLocal(files);
+  renderList(document.getElementById('search').value);
 }
 
 function exportAll(){
-  if (!API_BASE) return alert('Сначала подключитесь к backend');
-  const headers = {};
-  if (API_KEY) headers['x-api-key'] = API_KEY;
-  fetch(`${API_BASE}/backup`, { headers })
-    .then(r => { if (!r.ok) throw new Error('Export failed'); return r.blob(); })
-    .then(blob => { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'aetherdrive-backup.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); })
-    .catch(err => alert('Ошибка экспорта: '+err.message));
+  if (API_BASE) {
+    const headers = {};
+    if (API_KEY) headers['x-api-key'] = API_KEY;
+    fetch(`${API_BASE}/backup`, { headers })
+      .then(r => {
+        if (!r.ok) throw new Error('Export failed');
+        return r.blob();
+      })
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'aetherdrive-backup.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      })
+      .catch(err => alert('Ошибка экспорта: '+err.message));
+    return;
+  }
+  const files = loadFilesLocal();
+  const content = JSON.stringify(files);
+  const blob = new Blob([content], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'aetherdrive-backup.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function importBackup(file){
@@ -111,13 +207,21 @@ function importBackup(file){
     try {
       const parsed = JSON.parse(r.result);
       if (!Array.isArray(parsed)) throw new Error('Неверный формат');
-      alert('Импорт на сервер не реализован. Если нужно — добавлю.');
+      if (API_BASE) {
+        alert('Импорт backup на сервер пока не реализован через UI. Импорт будет выполнен локально.');
+      }
+      saveFilesLocal(parsed);
+      renderList(document.getElementById('search').value);
+      alert('Импорт (локально) завершён');
     } catch(e){ alert('Ошибка импорта: '+e.message); }
   };
   r.readAsText(file);
 }
 
+// Events
 window.addEventListener('DOMContentLoaded', ()=>{
+  loadApiKey();
+
   const input = document.getElementById('fileInput');
   input.addEventListener('change', e => { handleFilesList(Array.from(e.target.files)); input.value = ''; });
 
@@ -136,13 +240,10 @@ window.addEventListener('DOMContentLoaded', ()=>{
     const url = document.getElementById('backendUrl').value.trim();
     const key = document.getElementById('apiKey').value.trim();
     API_BASE = url || null;
-    API_KEY = key || null;
-    if (!API_BASE) return alert('Введите Backend URL');
-    enableControls(true);
-    renderList();
-    alert('Подключено к ' + API_BASE + (API_KEY ? ' (API Key задан)' : ''));
+    saveApiKey(key || null);
+    renderList(document.getElementById('search').value);
+    if (API_BASE) alert('Подключено к ' + API_BASE + (API_KEY ? ' (API Key задан)' : ' (API Key не задан)'));
   });
 
-  // Initially disabled until connect
-  enableControls(false);
+  renderList();
 });
