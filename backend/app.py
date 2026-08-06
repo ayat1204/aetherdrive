@@ -48,6 +48,14 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
     return True
 
 
+def public_url_for_key(key: str) -> str:
+    # Construct public URL for object (virtual-hosted style)
+    if AWS_REGION and AWS_REGION != 'us-east-1':
+        return f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{key}"
+    else:
+        return f"https://{S3_BUCKET}.s3.amazonaws.com/{key}"
+
+
 def load_meta():
     try:
         res = s3.get_object(Bucket=S3_BUCKET, Key=STORAGE_KEY)
@@ -55,7 +63,7 @@ def load_meta():
         return json.loads(content)
     except botocore.exceptions.ClientError as e:
         # If object not found, return empty list
-        if e.response['Error']['Code'] in ('NoSuchKey', 'NoSuchBucket'):
+        if e.response['Error']['Code'] in ('NoSuchKey', 'NoSuchBucket', 'NoSuchKey'):
             return []
         raise
 
@@ -81,14 +89,17 @@ async def upload_files(files: List[UploadFile] = File(...)):
         storage_name = f"{file_id}{ext}"
         try:
             data = await up.read()
-            s3.put_object(Bucket=S3_BUCKET, Key=storage_name, Body=data, ContentType=up.content_type)
+            # Upload object and make it public-readable so anyone with the file URL can download
+            s3.put_object(Bucket=S3_BUCKET, Key=storage_name, Body=data, ContentType=up.content_type, ACL='public-read')
+            public_url = public_url_for_key(storage_name)
             item = {
                 'id': file_id,
                 'name': filename,
                 'size': len(data),
                 'type': up.content_type,
                 'createdAt': int(time.time() * 1000),
-                'storage_name': storage_name
+                'storage_name': storage_name,
+                'public_url': public_url
             }
             meta.append(item)
             result.append(item)
@@ -105,11 +116,9 @@ async def download_file(file_id: str):
     if not item:
         raise HTTPException(status_code=404, detail='File not found')
     storage_name = item['storage_name']
-    try:
-        url = s3.generate_presigned_url('get_object', Params={'Bucket': S3_BUCKET, 'Key': storage_name}, ExpiresIn=3600)
-        return RedirectResponse(url)
-    except botocore.exceptions.ClientError:
-        raise HTTPException(status_code=500, detail='Failed to generate download URL')
+    # If object is public, redirect directly to public URL
+    public = item.get('public_url') or public_url_for_key(storage_name)
+    return RedirectResponse(public)
 
 
 @app.delete('/files/{file_id}', dependencies=[Depends(verify_api_key)])
