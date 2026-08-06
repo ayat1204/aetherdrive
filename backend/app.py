@@ -1,8 +1,8 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os, uuid, json, shutil
-from typing import List
+from typing import List, Optional
 
 STORAGE_DIR = os.path.join(os.path.dirname(__file__), 'storage')
 META_FILE = os.path.join(STORAGE_DIR, 'files.json')
@@ -11,6 +11,9 @@ os.makedirs(STORAGE_DIR, exist_ok=True)
 if not os.path.exists(META_FILE):
     with open(META_FILE, 'w', encoding='utf-8') as f:
         json.dump([], f)
+
+# Read API key from environment. If not set (None), endpoints are open.
+API_KEY = os.getenv('AETHERDRIVE_API_KEY')
 
 app = FastAPI(title='AetherDrive Backend')
 app.add_middleware(
@@ -29,12 +32,21 @@ def save_meta(meta):
     with open(META_FILE, 'w', encoding='utf-8') as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
+# Dependency to verify API key if configured
+def verify_api_key(x_api_key: Optional[str] = Header(None)):
+    if API_KEY is None:
+        # No key configured on server -> allow open access
+        return True
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=403, detail='Forbidden')
+    return True
+
 @app.get('/files')
 async def list_files():
     meta = load_meta()
     return meta
 
-@app.post('/upload')
+@app.post('/upload', dependencies=[Depends(verify_api_key)])
 async def upload_files(files: List[UploadFile] = File(...)):
     meta = load_meta()
     result = []
@@ -70,7 +82,7 @@ async def download_file(file_id: str):
         raise HTTPException(status_code=404, detail='File content not found')
     return FileResponse(path, filename=item['name'], media_type=item.get('type') or 'application/octet-stream')
 
-@app.delete('/files/{file_id}')
+@app.delete('/files/{file_id}', dependencies=[Depends(verify_api_key)])
 async def delete_file(file_id: str):
     meta = load_meta()
     idx = next((i for i,m in enumerate(meta) if m['id'] == file_id), None)
